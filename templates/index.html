@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+{% if not user %}
+<p>Please <a href="/login">log in</a> to make the chicken sing.</p>
+{% else %}
+<section class="card">
+  <h2>Make the Chicken Sing</h2>
+  <form action="/jobs" method="post" enctype="multipart/form-data">
+    <label>Song (mp3/wav, ≤45 s)</label>
+    <input type="file" name="song" accept=".mp3,.wav" required>
+    <button type="submit">Process</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>My Chicken Songs</h2>
+  {% if jobs %}
+    <table class="list">
+      <tr><th>ID</th><th>Status</th><th>File</th><th>Length</th><th>Output</th><th>When</th></tr>
+      {% for j in jobs %}
+      <tr>
+        <td>#{{ j.id }}</td>
+        <td>{{ j.status }}</td>
+        <td>{{ j.input_filename }}</td>
+        <td>{{ "%.1fs"|format(j.input_duration_sec or 0) }}</td>
+        <td>
+          {% if j.output_s3_url %}
+            <a href="{{ j.output_s3_url }}" target="_blank">download</a>
+          {% elif j.error_message %}
+            <span class="muted">{{ j.error_message }}</span>
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+        <td>{{ j.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% else %}
+    <p class="muted">No jobs yet.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
