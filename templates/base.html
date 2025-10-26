@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ title or "Chicken Singer" }}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="wrap">
+  <h1>🐔 Chicken Singer</h1>
+  <nav>
+    {% if user %}
+      <span>Hi, {{ user.email }}</span>
+      <form action="/logout" method="post" style="display:inline"><button>Logout</button></form>
+      {% if user.role == "admin" %}<a href="/admin/users">Admin</a>{% endif %}
+    {% else %}
+      <a href="/login">Login</a>
+    {% endif %}
+  </nav>
+</header>
+<main class="wrap">{% block content %}{% endblock %}</main>
+<footer class="wrap muted">© Chickenify</footer>
+</body>
+</html>
