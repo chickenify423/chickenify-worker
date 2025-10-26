@@ -1,9 +1,13 @@
-import bcrypt, itsdangerous, os
+import bcrypt, itsdangerous, os, sys
 from fastapi import Request
 from sqlmodel import Session, select
 from models import User
 
-SECRET = os.environ.get("SESSION_SECRET", "change-me-please")
+SECRET = os.environ.get("SESSION_SECRET")
+if not SECRET:
+    print("ERROR: SESSION_SECRET environment variable is required!", file=sys.stderr)
+    sys.exit(1)
+
 signer = itsdangerous.TimestampSigner(SECRET)
 
 def hash_pw(pw: str) -> str:
@@ -14,7 +18,8 @@ def check_pw(pw: str, pw_hash: str) -> bool:
 
 def set_session(response, user_id: int):
     token = signer.sign(str(user_id)).decode()
-    response.set_cookie("session", token, httponly=True, samesite="lax", secure=False)
+    is_secure = os.getenv("REPL_ID") is not None
+    response.set_cookie("session", token, httponly=True, samesite="lax", secure=is_secure)
 
 def get_current_user(request: Request, db: Session) -> User | None:
     token = request.cookies.get("session")

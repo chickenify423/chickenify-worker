@@ -57,10 +57,12 @@ Chicken Singer allows users to upload songs (MP3/WAV format, up to 45 seconds) w
 ## Environment Variables
 
 ### Required Secrets
-- `SESSION_SECRET` - Session encryption key for cookie signing
+- `SESSION_SECRET` - **REQUIRED** - Session encryption key for cookie signing (app will not start without this)
 - `DATABASE_URL` - PostgreSQL connection string (auto-configured by Replit)
 - `WORKER_URL` - External ML worker endpoint URL
 - `WORKER_API_KEY` - API key for worker authentication
+
+**Important:** The `SESSION_SECRET` must be set before starting the application. Generate a secure random string for production use.
 
 ### S3 Storage (Optional)
 - `S3_BUCKET` - S3 bucket name

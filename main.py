@@ -1,5 +1,5 @@
 import os, io, uuid, datetime as dt
-from fastapi import FastAPI, Request, Form, UploadFile, Depends
+from fastapi import FastAPI, Request, Form, UploadFile, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -54,7 +54,7 @@ def logout():
 def require_admin(request: Request, db: Session) -> User:
     user = get_current_user(request, db)
     if not user or user.role != "admin":
-        raise RedirectResponse("/", status_code=302)
+        raise HTTPException(status_code=403, detail="Admin access required")
     return user
 
 @app.get("/admin/users", response_class=HTMLResponse)
