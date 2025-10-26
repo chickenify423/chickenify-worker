@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+boto3
+numpy
+scipy
+soundfile
+librosa
+crepe==0.0.14
+demucs==4.0.1
+torch
+torchaudio
+gin-config
+ddsp
