@@ -1,0 +1,81 @@
+import os, io, tempfile, json, subprocess
+from fastapi import FastAPI, UploadFile, Form, Header
+from fastapi.responses import JSONResponse
+import boto3, soundfile as sf, numpy as np
+from ddsp_infer import render_chicken
+
+WORKER_API_KEY = os.getenv("WORKER_API_KEY")
+S3_BUCKET = os.getenv("S3_BUCKET")
+S3_REGION = os.getenv("S3_REGION")
+S3_KEY = os.getenv("S3_KEY")
+S3_SECRET = os.getenv("S3_SECRET")
+MODEL_CHECKPOINT = os.getenv("MODEL_CHECKPOINT")
+
+s3 = boto3.client(
+    "s3",
+    region_name=S3_REGION,
+    aws_access_key_id=S3_KEY,
+    aws_secret_access_key=S3_SECRET,
+)
+
+app = FastAPI()
+
+def unauthorized():
+    return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+
+@app.post("/infer")
+async def infer(audio: UploadFile,
+                job_id: str = Form(...),
+                user_id: str = Form(...),
+                s3_prefix: str = Form(...),
+                x_api_key: str | None = Header(None)):
+    if not x_api_key or x_api_key != WORKER_API_KEY:
+        return unauthorized()
+
+    with tempfile.TemporaryDirectory() as td:
+        in_any = os.path.join(td, "in.any")
+        in_wav = os.path.join(td, "in.wav")
+        open(in_any, "wb").write(await audio.read())
+
+        # Convert to 44.1kHz mono WAV
+        subprocess.run(["ffmpeg", "-y", "-i", in_any, "-ar", "44100", "-ac", "1", in_wav],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # --- Separate vocals & instrumental with Demucs ---
+        subprocess.run(["demucs", "-n", "htdemucs", "-o", td, in_wav],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        model_dir = os.path.join(td, "htdemucs")
+        vocal, inst = None, None
+        for root, _, files in os.walk(model_dir):
+            for f in files:
+                if f.endswith(".wav"):
+                    p = os.path.join(root, f)
+                    if "vocals" in f: vocal = p
+                    if "accompaniment" in f or "other" in f or "no_vocals" in f: inst = p
+        if not vocal:
+            return JSONResponse({"ok": False, "error": "demucs failed"}, status_code=500)
+
+        # --- Create chickenified vocal ---
+        chicken_vocal = os.path.join(td, "chicken_vocal.wav")
+        render_chicken(vocal, chicken_vocal, MODEL_CHECKPOINT)
+
+        # --- Mix chicken + instrumental ---
+        out_wav = os.path.join(td, "output.wav")
+        if inst:
+            subprocess.run([
+                "ffmpeg", "-y",
+                "-i", chicken_vocal, "-i", inst,
+                "-filter_complex", "[0:a]volume=1.0[a0];[1:a]volume=0.9[a1];[a0][a1]amix=inputs=2:normalize=0",
+                out_wav
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            out_wav = chicken_vocal
+
+        # --- Upload to S3 ---
+        data, sr = sf.read(out_wav)
+        dur = float(len(data)/sr)
+        s3.upload_file(out_wav, S3_BUCKET, s3_prefix,
+                       ExtraArgs={"ContentType": "audio/wav", "ACL": "public-read"})
+        url = f"https://{S3_BUCKET}.s3.{S3_REGION}.amazonaws.com/{s3_prefix}"
+
+        return {"ok": True, "output_s3_url": url, "duration_sec": dur}
